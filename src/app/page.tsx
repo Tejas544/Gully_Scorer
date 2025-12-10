@@ -1,65 +1,67 @@
-import Image from "next/image";
+'use client';
+import { useRouter } from 'next/navigation';
 
-export default function Home() {
+export default function LandingPage() {
+  const router = useRouter();
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center overflow-hidden relative">
+      
+      {/* Background Gradient Blob (Visual Flare) */}
+      <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-blue-600/20 rounded-full blur-[100px]" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-purple-600/20 rounded-full blur-[100px]" />
+
+      <div className="max-w-3xl z-10 space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
+        
+        {/* LOGO / BADGE */}
+        <div className="inline-block bg-gray-900 border border-gray-800 rounded-full px-4 py-1 text-sm font-medium text-gray-400 mb-4">
+          🏏 The Ultimate Gully Cricket Scorer
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* HERO TITLE */}
+        <h1 className="text-5xl md:text-7xl font-black tracking-tighter bg-gradient-to-r from-white to-gray-500 bg-clip-text text-transparent">
+          LEVEL UP YOUR <br />
+          <span className="text-white">GULLY LEAGUE</span>
+        </h1>
+
+        <p className="text-lg md:text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed">
+          Create tournaments, track NRR automatically, and view detailed player stats. 
+          The professional scoring experience for your backyard matches.
+        </p>
+
+        {/* CTA BUTTONS */}
+        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mt-8">
+          <button 
+    onClick={() => router.push('/login')}
+    className="px-8 py-4 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition transform hover:scale-105 active:scale-95 text-lg w-full sm:w-auto shadow-lg shadow-white/10"
+  >
+    Start Scoring (Admin)
+  </button>
+  <button 
+     onClick={() => router.push('/tournament')}
+     className="px-8 py-4 bg-gray-900 text-white font-bold rounded-xl border border-gray-800 hover:bg-gray-800 transition w-full sm:w-auto flex items-center justify-center gap-2"
+  >
+    <span>👀</span> View Live Scores
+  </button>
         </div>
-      </main>
+
+        {/* FEATURE GRID */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-16 text-left">
+          <FeatureCard title="🏆 Tournaments" desc="Auto-Fixtures & Finals" />
+          <FeatureCard title="📊 Live NRR" desc="Real-time Points Table" />
+          <FeatureCard title="👑 Player Stats" desc="Orange & Purple Caps" />
+          <FeatureCard title="⚡ Super Over" desc="Tie-Breaker Logic" />
+        </div>
+      </div>
     </div>
   );
+}
+
+function FeatureCard({ title, desc }: { title: string, desc: string }) {
+  return (
+    <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800/50">
+      <h3 className="font-bold text-white">{title}</h3>
+      <p className="text-xs text-gray-500 mt-1">{desc}</p>
+    </div>
+  )
 }
