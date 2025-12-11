@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ThemeProvider } from 'next-themes';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   // Ensure the client is created once per component lifecycle
@@ -17,7 +18,12 @@ export default function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
+      {/* attribute="class" tells the provider to toggle the 'dark' CSS class on the <html> tag.
+        defaultTheme="dark" ensures your original dark look remains the default.
+      */}
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+        {children}
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

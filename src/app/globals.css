@@ -1,1 +1,13 @@
 @import "tailwindcss";
+
+/* 1. Configure Dark Mode */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* 2. Remove the old :root and body rules that forced the gradient background. */
+/* We rely 100% on the classes in layout.tsx now. */
+
+@layer base {
+  body {
+    @apply antialiased;
+  }
+}

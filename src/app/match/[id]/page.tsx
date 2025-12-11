@@ -77,14 +77,14 @@ export default function MatchPage() {
     return () => { supabase.removeChannel(channel); };
   }, [id, store.inningsId]);
 
-  if (loading) return <div className="p-8 text-center text-white">Loading Match...</div>;
+  if (loading) return <div className="p-8 text-center text-gray-500 dark:text-white">Loading Match...</div>;
 
   // Case 1: Toss Needed
   if (!currentInnings) {
     if (user) {
         return <TossModal matchId={id as string} teamA={matchData.team_a} teamB={matchData.team_b} onTossComplete={() => loadMatchState()} />;
     } else {
-        return <div className="p-10 text-center text-white">Match not started yet. Waiting for Toss...</div>;
+        return <div className="p-10 text-center text-gray-500 dark:text-white">Match not started yet. Waiting for Toss...</div>;
     }
   }
 
@@ -93,34 +93,38 @@ export default function MatchPage() {
   const bowlingTeamName = battingTeamId === matchData.team_a.id ? matchData.team_b.name : matchData.team_a.name;
 
   return (
-    <div className="min-h-screen bg-black text-white p-4 pb-safe flex flex-col relative">
+    // THEME UPDATE: Removed 'bg-black'. Added adaptive text colors.
+    <div className="min-h-screen p-4 pb-safe flex flex-col relative text-gray-900 dark:text-white">
        <WicketOverlay />
 
        {/* HEADER */}
        <div className="mb-4 text-center">
-        <h2 className="text-gray-400 text-sm uppercase tracking-widest">{battingTeamName} vs {bowlingTeamName}</h2>
-        <div className="mt-2 text-5xl font-bold">
-          {store.totalRuns}<span className="text-2xl text-gray-500">/{store.totalWickets}</span>
+        <h2 className="text-gray-500 dark:text-gray-400 text-sm uppercase tracking-widest font-bold">
+            {battingTeamName} <span className="text-xs text-gray-400 font-normal">vs</span> {bowlingTeamName}
+        </h2>
+        <div className="mt-2 text-6xl font-black tracking-tighter">
+          {store.totalRuns}<span className="text-3xl text-gray-400 dark:text-gray-600 font-bold">/{store.totalWickets}</span>
         </div>
-        <div className="text-xl text-yellow-500 mt-1 font-mono">
+        <div className="text-xl text-yellow-600 dark:text-yellow-500 mt-1 font-mono font-bold">
           Overs: {Math.floor(store.legalBallsBowled / 6)}.{store.legalBallsBowled % 6}
         </div>
       </div>
 
       {store.inningsStatus === 'completed' && (
-        <div className="bg-red-600 text-white p-3 text-center rounded-lg mb-4 font-bold animate-pulse">
+        <div className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 p-3 text-center rounded-lg mb-4 font-bold animate-pulse border border-red-200 dark:border-red-900">
           INNINGS BREAK / MATCH ENDED
         </div>
       )}
 
       {store.inningsNumber === 2 && store.target !== null && (
-        <div className="bg-gray-800 text-xs py-1 px-3 rounded-full mx-auto w-fit mb-2 border border-gray-600">
-           Target: {store.target} ({Math.max(0, store.target - store.totalRuns)} runs needed)
+        // TARGET PILL THEME
+        <div className="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 text-xs py-1 px-3 rounded-full mx-auto w-fit mb-4 border border-gray-300 dark:border-gray-700 shadow-sm">
+           Target: <span className="font-bold">{store.target}</span> ({Math.max(0, store.target - store.totalRuns)} runs needed)
         </div>
       )}
 
-       {/* TIMELINE */}
-       <div className="flex-1 overflow-hidden bg-gray-900/50 rounded-xl mb-4 border border-gray-800">
+       {/* TIMELINE (Adaptive Background) */}
+       <div className="flex-1 overflow-hidden bg-white dark:bg-gray-900 rounded-2xl mb-4 border border-gray-200 dark:border-gray-800 shadow-sm">
           <BallTimeline />
        </div>
 
@@ -135,7 +139,7 @@ export default function MatchPage() {
        )}
        
        {!user && (
-           <div className="text-center text-gray-500 text-xs mt-2">
+           <div className="text-center text-gray-400 dark:text-gray-600 text-xs mt-2">
                You are viewing as Guest. Updates are live.
            </div>
        )}

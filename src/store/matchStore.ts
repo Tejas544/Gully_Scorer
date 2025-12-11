@@ -30,7 +30,7 @@ interface MatchDataPayload {
   team_a_id: string;
   team_b_id: string;
   season_id: string;
-  round_number: number; // Added round_number
+  round_number: number;
   winner_id?: string | null;
   result_note?: string | null;
 }
@@ -40,7 +40,7 @@ interface MatchState {
   inningsId: string | null;
   teamIds: TeamIds | null;
   seasonId: string | null;
-  roundNumber: number; // Added to track if Super Over
+  roundNumber: number;
 
   // Scoring
   totalRuns: number;
@@ -50,7 +50,7 @@ interface MatchState {
 
   // Game State
   inningsNumber: 1 | 2;
-  target: number | null; // Only for 2nd innings
+  target: number | null;
   inningsStatus: "active" | "completed";
   matchResult: MatchResult | null;
 
@@ -69,7 +69,7 @@ interface MatchState {
 // --- Logic Helpers ---
 
 const MAX_LEGAL_BALLS_REGULAR = 12; // 2 Overs
-const MAX_LEGAL_BALLS_SUPER = 6;    // 1 Over for Super Over (Round 101)
+const MAX_LEGAL_BALLS_SUPER = 6;    // 1 Over for Super Over
 const MAX_WICKETS = 1; // 1v1 Format
 
 // --- Store ---
@@ -102,12 +102,12 @@ export const useMatchStore = create<MatchState>()(
           matchId,
           inningsId: innings.id,
           seasonId: matchData.season_id,
-          roundNumber: matchData.round_number, // Store round number
+          roundNumber: matchData.round_number,
           inningsNumber: innings.innings_number,
           totalRuns: innings.total_runs,
           totalWickets: innings.total_wickets,
           legalBallsBowled: innings.legal_balls_bowled,
-          ballsHistory: [], // In Phase 4 we will load history here
+          ballsHistory: [],
           inningsStatus: innings.is_completed ? "completed" : "active",
           teamIds: { batting: battingId, bowling: bowlingId },
           matchResult: matchData.winner_id
@@ -162,10 +162,6 @@ export const useMatchStore = create<MatchState>()(
 
         // --- GAME LOGIC START ---
         
-        // Determine Max Balls based on Round Type (Super Over = 101)
-        // --- GAME LOGIC START ---
-        
-        // Determine Max Balls
         const maxBalls = state.roundNumber === 101 ? MAX_LEGAL_BALLS_SUPER : MAX_LEGAL_BALLS_REGULAR;
         
         let isOver = newTotalWickets >= MAX_WICKETS || newLegalBalls >= maxBalls;
@@ -174,43 +170,29 @@ export const useMatchStore = create<MatchState>()(
         let winnerId: string | null = null;
         let resultMessage = "";
 
-        // CHECK: Target Chasing (2nd Innings Only)
         if (state.inningsNumber === 2 && state.target) {
-          // Case A: Chased successfully
           if (newTotalRuns >= state.target) {
             isOver = true;
             matchFinished = true;
             winnerId = state.teamIds?.batting || null;
             resultMessage = "Chased down successfully!";
-          } 
-          // Case B: Innings ended (Wicket or Overs)
-          else if (isOver) {
+          } else if (isOver) {
             matchFinished = true;
-            
-            // TIE SCENARIO
             if (newTotalRuns === state.target - 1) {
-              winnerId = null; // No winner yet
-
-              // LOGIC FIX: Handle Tie based on Match Type
+              winnerId = null; // TIE
               if (state.roundNumber < 100) {
-                  // LEAGUE MATCH: Just a draw
                   resultMessage = "Match Tied (1 pt each)";
               } else if (state.roundNumber === 100) {
-                  // FINAL: Needs Super Over
                   resultMessage = "Match Tied! (Super Over needed)";
               } else if (state.roundNumber === 101) {
-                  // SUPER OVER TIED: Needs Bowl Out
                   resultMessage = "Bowl Out Needed!";
               }
-            } 
-            // DEFENDED SCENARIO
-            else {
+            } else {
               winnerId = state.teamIds?.bowling || null;
               resultMessage = "Defended the target!";
             }
           }
         }
-        // --- GAME LOGIC END ---
         // --- GAME LOGIC END ---
 
         const newBall: BallSchema = {
@@ -266,8 +248,10 @@ export const useMatchStore = create<MatchState>()(
 
           if (inningsError) throw inningsError;
 
-          // C. IF MATCH FINISHED: Update Match Table
+          // C. IF MATCH FINISHED: Update Match Table & SAVE CAREER STATS
           if (matchFinished) {
+            console.log("🏆 Match Finished! Starting Sync...");
+
             const { error: matchError } = await supabase
               .from("matches")
               .update({
@@ -278,16 +262,81 @@ export const useMatchStore = create<MatchState>()(
               .eq("id", state.matchId);
 
             if (matchError) throw matchError;
+
+            // --- SAVE CAREER STATS WITH DEBUGGING ---
+            if (state.teamIds && state.matchId) {
+                console.log("🔍 Fetching Team Links...");
+                const { data: teamPlayers } = await supabase
+                    .from('team_players')
+                    .select('team_id, player_id')
+                    .in('team_id', [state.teamIds.batting, state.teamIds.bowling]);
+
+                console.log("🔍 Fetching Innings 1...");
+                const { data: inn1 } = await supabase
+                    .from('innings')
+                    .select('*')
+                    .eq('match_id', state.matchId)
+                    .eq('innings_number', 1)
+                    .single();
+
+                if (teamPlayers && inn1) {
+                    console.log("✅ Data Found. Identifying Players...");
+                    
+                    // Logic: 
+                    // Innings 1: 'batting' was P1, 'bowling' was P2
+                    // Innings 2: 'batting' is P2, 'bowling' is P1
+                    
+                    const p1_id = teamPlayers.find(tp => tp.team_id === inn1.batting_team_id)?.player_id;
+                    const p2_id = teamPlayers.find(tp => tp.team_id !== inn1.batting_team_id)?.player_id;
+                    
+                    console.log(`Player 1 ID (Batted 1st): ${p1_id}`);
+                    console.log(`Player 2 ID (Batted 2nd): ${p2_id}`);
+
+                    if (p1_id && p2_id) {
+                        console.log("💾 Saving Player 1 Stats...");
+                        const { error: err1 } = await supabase.from('match_player_stats').insert({
+                            match_id: state.matchId,
+                            player_id: p1_id,
+                            team_id: inn1.batting_team_id,
+                            // Batted in Innings 1 (Database)
+                            runs_scored: inn1.total_runs,
+                            balls_faced: inn1.legal_balls_bowled,
+                            is_out: inn1.total_wickets > 0,
+                            // Bowled in Innings 2 (Local State)
+                            runs_conceded: newTotalRuns,
+                            wickets_taken: newTotalWickets,
+                            legal_balls_bowled: newLegalBalls
+                        });
+                        if (err1) console.error("❌ Save P1 Failed:", err1);
+
+                        console.log("💾 Saving Player 2 Stats...");
+                        const { error: err2 } = await supabase.from('match_player_stats').insert({
+                            match_id: state.matchId,
+                            player_id: p2_id,
+                            team_id: state.teamIds.batting, // Current Batter
+                            // Batted in Innings 2 (Local State)
+                            runs_scored: newTotalRuns,
+                            balls_faced: newLegalBalls,
+                            is_out: newTotalWickets > 0,
+                            // Bowled in Innings 1 (Database)
+                            runs_conceded: inn1.total_runs,
+                            wickets_taken: inn1.total_wickets,
+                            legal_balls_bowled: inn1.legal_balls_bowled
+                        });
+                        if (err2) console.error("❌ Save P2 Failed:", err2);
+                    }
+                } else {
+                    console.error("❌ Failed to find Team Players or Innings 1");
+                }
+            }
             
             // Only trigger automation if it's NOT a Super Over (Round 101)
-            // We don't want Super Over completion to trigger a new Final
             if (state.seasonId && state.roundNumber !== 101) {
               checkAndCreateFinal(state.seasonId);
             }
           }
         } catch (err: any) {
           console.error("Sync Failed FULL ERROR:", JSON.stringify(err, null, 2));
-          // 6. Rollback on Error
           set({
             totalRuns: state.totalRuns,
             totalWickets: state.totalWickets,
@@ -406,6 +455,9 @@ export const useMatchStore = create<MatchState>()(
               is_completed: false,
               result_note: null
             }).eq('id', state.matchId);
+            
+            // Delete stats on undo so we don't duplicate if they win again
+            await supabase.from('match_player_stats').delete().eq('match_id', state.matchId);
           }
 
         } catch (err) {

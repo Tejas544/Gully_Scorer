@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { calculateStats, TeamStats, PlayerBattingStats, PlayerBowlingStats } from '@/lib/stats';
+import Link from 'next/link';
 
 export default function TournamentDashboard() {
   const { id } = useParams();
@@ -12,6 +13,7 @@ export default function TournamentDashboard() {
   // Data State
   const [matches, setMatches] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
+  const [playerMap, setPlayerMap] = useState<Record<string, string>>({}); // Map TeamID -> PlayerID
   const [loading, setLoading] = useState(true);
   const [seasonName, setSeasonName] = useState("");
   const [user, setUser] = useState<any>(null); // Track User for Admin Controls
@@ -36,12 +38,26 @@ export default function TournamentDashboard() {
              .select('*, innings(*), team_a:teams!team_a_id(name), team_b:teams!team_b_id(name)')
              .eq('season_id', id)
              .order('round_number'),
-           supabase.from('teams').select('*').eq('season_id', id)
+           // JOIN to get the linked Player ID for every team
+           supabase.from('teams')
+             .select('*, team_players(player_id)')
+             .eq('season_id', id)
         ]);
 
         if (seasonRes.data) setSeasonName(seasonRes.data.name);
         if (matchRes.data) setMatches(matchRes.data);
-        if (teamRes.data) setTeams(teamRes.data);
+        
+        if (teamRes.data) {
+            setTeams(teamRes.data);
+            // Create a lookup map: TeamID -> PlayerID
+            const map: Record<string, string> = {};
+            teamRes.data.forEach((t: any) => {
+                if (t.team_players && t.team_players.length > 0) {
+                    map[t.id] = t.team_players[0].player_id;
+                }
+            });
+            setPlayerMap(map);
+        }
       } catch (err) {
         console.error("Error loading dashboard:", err);
       } finally {
@@ -51,7 +67,7 @@ export default function TournamentDashboard() {
     fetchData();
   }, [id]);
 
-  // 2. Realtime Listener & Polling (Same as before)
+  // 2. Realtime Listener & Polling
   useEffect(() => {
     const channel = supabase.channel('tournament-updates')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'matches', filter: `season_id=eq.${id}` }, 
@@ -65,7 +81,7 @@ export default function TournamentDashboard() {
       )
       .subscribe();
 
-    // Fallback polling for Final generation race conditions
+    // Fallback polling
     const interval = setInterval(async () => {
         const { data: newMatches } = await supabase.from('matches').select('*, innings(*), team_a:teams!team_a_id(name), team_b:teams!team_b_id(name)').eq('season_id', id).order('round_number');
         if (newMatches) {
@@ -82,20 +98,20 @@ export default function TournamentDashboard() {
 
   const handleMatchClick = (matchId: string) => router.push(`/match/${matchId}`);
 
-  // Calculate Stats
   const { standings, batting, bowling } = calculateStats(matches, teams);
 
   if (loading) return <div className="p-8 text-center text-gray-500">Loading Tournament...</div>;
 
   return (
-    <div key={id as string} className="min-h-screen bg-black text-white p-4 pb-safe flex flex-col">
+    // THEME UPDATE: Removed 'bg-black'. Added text colors.
+    <div key={id as string} className="min-h-screen p-4 pb-safe flex flex-col text-gray-900 dark:text-white">
       
       {/* HEADER */}
       <header className="mb-6 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <button 
               onClick={() => router.push('/tournament')}
-              className="bg-gray-800 p-2 rounded-full hover:bg-gray-700 transition text-sm"
+              className="bg-gray-200 dark:bg-gray-800 p-2 rounded-full hover:bg-gray-300 dark:hover:bg-gray-700 transition text-sm"
               title="Back to All Seasons"
             >
               🏠
@@ -106,24 +122,27 @@ export default function TournamentDashboard() {
             </div>
           </div>
           
-          {/* HIDE BUTTON IF GUEST */}
           {user && (
             <button 
                 onClick={() => router.push('/admin/create')}
-                className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2 rounded border border-gray-700 transition"
+                className="text-xs bg-gray-900 dark:bg-gray-800 hover:bg-gray-700 text-white dark:text-gray-300 px-3 py-2 rounded border border-gray-700 transition"
             >
                 + New Season
             </button>
           )}
       </header>
       
-      {/* TABS */}
-      <div className="flex bg-gray-900 p-1 rounded-lg mb-6 border border-gray-800">
+      {/* TABS (THEME UPDATED) */}
+      <div className="flex bg-gray-100 dark:bg-gray-900 p-1 rounded-lg mb-6 border border-gray-200 dark:border-gray-800">
         {(['fixtures', 'table', 'stats'] as const).map(tab => (
             <button 
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-3 text-sm font-bold rounded-md transition capitalize ${activeTab === tab ? 'bg-gray-800 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+            className={`flex-1 py-3 text-sm font-bold rounded-md transition capitalize ${
+                activeTab === tab 
+                ? 'bg-white dark:bg-gray-800 text-black dark:text-white shadow-sm' 
+                : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
+            }`}
             >
             {tab}
             </button>
@@ -141,16 +160,14 @@ export default function TournamentDashboard() {
         )}
 
         {activeTab === 'stats' && (
-            <StatsView batting={batting} bowling={bowling} />
+            <StatsView batting={batting} bowling={bowling} playerMap={playerMap} />
         )}
       </div>
     </div>
   );
 }
 
-// --- SUB COMPONENTS (UNCHANGED) ---
-// (Keep the FixturesView, PointsTableView, and StatsView functions exactly as they were in the previous file. 
-// I have omitted them here for brevity, but you must keep them in the file.)
+// --- SUB COMPONENTS ---
 
 function FixturesView({ matches, onMatchClick }: { matches: any[], onMatchClick: (id: string) => void }) {
     if (matches.length === 0) return <div className="text-gray-500 text-center mt-10">No matches scheduled.</div>;
@@ -160,26 +177,27 @@ function FixturesView({ matches, onMatchClick }: { matches: any[], onMatchClick:
                 <div 
                     key={match.id}
                     onClick={() => onMatchClick(match.id)}
+                    // CARD THEME: White/Gray-900
                     className={`p-4 rounded-xl border flex justify-between items-center cursor-pointer transition active:scale-95 ${
                         match.is_completed 
-                        ? 'bg-gray-900 border-gray-800 opacity-60' 
-                        : 'bg-gray-800 border-gray-700 hover:border-blue-500/50'
+                        ? 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800 opacity-60' 
+                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-blue-500/50 shadow-sm'
                     }`}
                 >
                         <div>
-                        <div className={`text-[10px] uppercase font-bold tracking-wider mb-1 ${match.round_number === 100 ? 'text-yellow-500 animate-pulse' : 'text-gray-400'}`}>
+                        <div className={`text-[10px] uppercase font-bold tracking-wider mb-1 ${match.round_number === 100 ? 'text-yellow-600 dark:text-yellow-500 animate-pulse' : 'text-gray-500 dark:text-gray-400'}`}>
                             {match.round_number === 100 ? "🏆 GRAND FINAL" : match.round_number === 101 ? "⚡ SUPER OVER" : `Round ${match.round_number}`}
                         </div>
-                        <div className="font-bold text-lg">
-                            {match.team_a?.name} <span className="text-gray-600 text-sm">vs</span> {match.team_b?.name}
+                        <div className="font-bold text-lg text-gray-900 dark:text-white">
+                            {match.team_a?.name} <span className="text-gray-400 text-sm">vs</span> {match.team_b?.name}
                         </div>
                         {match.is_completed && (
-                            <div className="text-green-400 text-xs mt-1 font-medium">{match.result_note}</div>
+                            <div className="text-green-600 dark:text-green-400 text-xs mt-1 font-medium">{match.result_note}</div>
                         )}
                         </div>
                         <div className="ml-4">
                         {match.is_completed ? (
-                            <div className="bg-green-900/20 text-green-600 text-[10px] font-black px-2 py-1 rounded border border-green-900/30">DONE</div>
+                            <div className="bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-500 text-[10px] font-black px-2 py-1 rounded border border-green-200 dark:border-green-900/30">DONE</div>
                         ) : (
                             <div className={`text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg ${match.round_number === 100 ? 'bg-yellow-600 shadow-yellow-900/50' : 'bg-blue-600 shadow-blue-900/50'}`}>
                                 PLAY
@@ -194,9 +212,10 @@ function FixturesView({ matches, onMatchClick }: { matches: any[], onMatchClick:
 
 function PointsTableView({ standings }: { standings: TeamStats[] }) {
     return (
-        <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+        // TABLE THEME
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
             <table className="w-full text-sm text-left">
-                <thead className="bg-gray-800 text-gray-400 uppercase text-[10px] tracking-wider">
+                <thead className="bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 uppercase text-[10px] tracking-wider">
                     <tr>
                         <th className="px-4 py-3">Team</th>
                         <th className="px-2 py-3 text-center">P</th>
@@ -206,22 +225,22 @@ function PointsTableView({ standings }: { standings: TeamStats[] }) {
                         <th className="px-4 py-3 text-right">Pts</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody className="text-gray-900 dark:text-white">
                     {standings.map((team, idx) => (
-                        <tr key={team.teamId} className="border-b border-gray-800 last:border-0 hover:bg-gray-800/50 transition">
+                        <tr key={team.teamId} className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
                             <td className="px-4 py-3 font-bold flex items-center gap-3">
-                                <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] ${idx < 2 ? 'bg-yellow-500/20 text-yellow-500' : 'bg-gray-700 text-gray-400'}`}>
+                                <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] ${idx < 2 ? 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-500' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>
                                     {idx + 1}
                                 </span>
                                 {team.name}
                             </td>
-                            <td className="px-2 py-3 text-center text-gray-300">{team.played}</td>
-                            <td className="px-2 py-3 text-center text-green-500 font-bold">{team.won}</td>
-                            <td className="px-2 py-3 text-center text-red-500">{team.lost}</td>
-                            <td className="px-2 py-3 text-center text-gray-400 font-mono text-xs hidden sm:table-cell">
+                            <td className="px-2 py-3 text-center text-gray-500 dark:text-gray-300">{team.played}</td>
+                            <td className="px-2 py-3 text-center text-green-600 dark:text-green-500 font-bold">{team.won}</td>
+                            <td className="px-2 py-3 text-center text-red-600 dark:text-red-500">{team.lost}</td>
+                            <td className="px-2 py-3 text-center text-gray-500 dark:text-gray-400 font-mono text-xs hidden sm:table-cell">
                                 {team.nrr > 0 ? '+' : ''}{team.nrr}
                             </td>
-                            <td className="px-4 py-3 text-right font-black text-white text-lg">{team.points}</td>
+                            <td className="px-4 py-3 text-right font-black text-lg">{team.points}</td>
                         </tr>
                     ))}
                 </tbody>
@@ -230,15 +249,28 @@ function PointsTableView({ standings }: { standings: TeamStats[] }) {
     );
 }
 
-function StatsView({ batting, bowling }: { batting: PlayerBattingStats[], bowling: PlayerBowlingStats[] }) {
+function StatsView({ batting, bowling, playerMap }: { batting: PlayerBattingStats[], bowling: PlayerBowlingStats[], playerMap: Record<string, string> }) {
+    
+    const PlayerLink = ({ teamId, name }: { teamId: string, name: string }) => {
+        const pid = playerMap[teamId];
+        return pid ? (
+            <Link href={`/player/${pid}`} className="hover:text-blue-500 hover:underline decoration-blue-500/50 underline-offset-4 transition flex items-center gap-1 group">
+                {name} <span className="text-[10px] text-gray-400 group-hover:text-blue-500 transition">↗</span>
+            </Link>
+        ) : (
+            <span>{name}</span>
+        );
+    };
+
     return (
         <div className="space-y-6">
-            <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-                <div className="bg-orange-900/20 border-b border-orange-900/30 p-3">
-                    <h3 className="text-orange-500 font-bold text-sm uppercase tracking-wider">Orange Cap (Runs)</h3>
+            {/* BATTING CARD */}
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
+                <div className="bg-orange-50 dark:bg-orange-900/20 border-b border-orange-100 dark:border-orange-900/30 p-3">
+                    <h3 className="text-orange-600 dark:text-orange-500 font-bold text-sm uppercase tracking-wider">Orange Cap (Runs)</h3>
                 </div>
-                <table className="w-full text-sm text-left">
-                    <thead className="text-gray-500 text-[10px] uppercase">
+                <table className="w-full text-sm text-left text-gray-900 dark:text-white">
+                    <thead className="text-gray-500 dark:text-gray-500 text-[10px] uppercase bg-gray-50 dark:bg-transparent">
                         <tr>
                             <th className="px-4 py-2">Player</th>
                             <th className="px-2 py-2 text-right">Runs</th>
@@ -247,22 +279,26 @@ function StatsView({ batting, bowling }: { batting: PlayerBattingStats[], bowlin
                     </thead>
                     <tbody>
                         {batting.slice(0, 5).map((p, i) => (
-                            <tr key={p.teamId} className="border-b border-gray-800 last:border-0">
-                                <td className="px-4 py-2 font-medium">{i+1}. {p.name}</td>
-                                <td className="px-2 py-2 text-right font-bold text-white">{p.runs}</td>
-                                <td className="px-4 py-2 text-right text-gray-400">{p.highestScore}</td>
+                            <tr key={p.teamId} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
+                                <td className="px-4 py-2 font-medium flex items-center gap-2">
+                                    <span className="text-gray-400 font-mono text-xs w-3">{i+1}.</span>
+                                    <PlayerLink teamId={p.teamId} name={p.name} />
+                                </td>
+                                <td className="px-2 py-2 text-right font-bold">{p.runs}</td>
+                                <td className="px-4 py-2 text-right text-gray-500 dark:text-gray-400">{p.highestScore}</td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
 
-            <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-                <div className="bg-purple-900/20 border-b border-purple-900/30 p-3">
-                    <h3 className="text-purple-500 font-bold text-sm uppercase tracking-wider">Purple Cap (Wickets)</h3>
+            {/* BOWLING CARD */}
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
+                <div className="bg-purple-50 dark:bg-purple-900/20 border-b border-purple-100 dark:border-purple-900/30 p-3">
+                    <h3 className="text-purple-600 dark:text-purple-500 font-bold text-sm uppercase tracking-wider">Purple Cap (Wickets)</h3>
                 </div>
-                <table className="w-full text-sm text-left">
-                    <thead className="text-gray-500 text-[10px] uppercase">
+                <table className="w-full text-sm text-left text-gray-900 dark:text-white">
+                    <thead className="text-gray-500 dark:text-gray-500 text-[10px] uppercase bg-gray-50 dark:bg-transparent">
                         <tr>
                             <th className="px-4 py-2">Player</th>
                             <th className="px-2 py-2 text-right">Wkts</th>
@@ -271,10 +307,13 @@ function StatsView({ batting, bowling }: { batting: PlayerBattingStats[], bowlin
                     </thead>
                     <tbody>
                         {bowling.slice(0, 5).map((p, i) => (
-                            <tr key={p.teamId} className="border-b border-gray-800 last:border-0">
-                                <td className="px-4 py-2 font-medium">{i+1}. {p.name}</td>
-                                <td className="px-2 py-2 text-right font-bold text-white">{p.wickets}</td>
-                                <td className="px-4 py-2 text-right text-gray-400">{p.bestFigures}</td>
+                            <tr key={p.teamId} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
+                                <td className="px-4 py-2 font-medium flex items-center gap-2">
+                                    <span className="text-gray-400 font-mono text-xs w-3">{i+1}.</span>
+                                    <PlayerLink teamId={p.teamId} name={p.name} />
+                                </td>
+                                <td className="px-2 py-2 text-right font-bold">{p.wickets}</td>
+                                <td className="px-4 py-2 text-right text-gray-500 dark:text-gray-400">{p.bestFigures}</td>
                             </tr>
                         ))}
                     </tbody>
