@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { calculateStats, TeamStats, PlayerBattingStats, PlayerBowlingStats } from '@/lib/stats';
 import Link from 'next/link';
+import AnimatedList from '@/components/ui/AnimatedList';
 
 export default function TournamentDashboard() {
   const { id } = useParams();
@@ -13,32 +14,28 @@ export default function TournamentDashboard() {
   // Data State
   const [matches, setMatches] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
-  const [playerMap, setPlayerMap] = useState<Record<string, string>>({}); // Map TeamID -> PlayerID
+  const [playerMap, setPlayerMap] = useState<Record<string, string>>({}); 
   const [loading, setLoading] = useState(true);
   const [seasonName, setSeasonName] = useState("");
-  const [user, setUser] = useState<any>(null); // Track User for Admin Controls
+  const [user, setUser] = useState<any>(null); 
   
   // UI State
   const [activeTab, setActiveTab] = useState<'fixtures' | 'table' | 'stats'>('fixtures');
 
-  // 1. Initial Fetch & Auth Check
+  // 1. Initial Fetch
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        
-        // Check Auth
         const { data: { user } } = await supabase.auth.getUser();
         setUser(user);
 
-        // Fetch Data
         const [seasonRes, matchRes, teamRes] = await Promise.all([
            supabase.from('seasons').select('name').eq('id', id).maybeSingle(),
            supabase.from('matches')
              .select('*, innings(*), team_a:teams!team_a_id(name), team_b:teams!team_b_id(name)')
              .eq('season_id', id)
              .order('round_number'),
-           // JOIN to get the linked Player ID for every team
            supabase.from('teams')
              .select('*, team_players(player_id)')
              .eq('season_id', id)
@@ -49,7 +46,6 @@ export default function TournamentDashboard() {
         
         if (teamRes.data) {
             setTeams(teamRes.data);
-            // Create a lookup map: TeamID -> PlayerID
             const map: Record<string, string> = {};
             teamRes.data.forEach((t: any) => {
                 if (t.team_players && t.team_players.length > 0) {
@@ -67,21 +63,29 @@ export default function TournamentDashboard() {
     fetchData();
   }, [id]);
 
-  // 2. Realtime Listener & Polling
+  // 2. Realtime Listener
   useEffect(() => {
     const channel = supabase.channel('tournament-updates')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'matches', filter: `season_id=eq.${id}` }, 
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `season_id=eq.${id}` }, 
         async (payload) => {
-          const { data: newMatch } = await supabase.from('matches').select('*, innings(*), team_a:teams!team_a_id(name), team_b:teams!team_b_id(name)').eq('id', payload.new.id).single();
-          if (newMatch) setMatches(prev => [...prev, newMatch]);
+            const newId = (payload.new as any).id;
+            if (!newId) return;
+          const { data: newMatch } = await supabase
+            .from('matches')
+            .select('*, innings(*), team_a:teams!team_a_id(name), team_b:teams!team_b_id(name)')
+            .eq('id', newId)
+            .single();
+            
+          if (newMatch) {
+             setMatches(prev => {
+                 const exists = prev.find(m => m.id === newMatch.id);
+                 return exists ? prev.map(m => m.id === newMatch.id ? newMatch : m) : [...prev, newMatch];
+             });
+          }
         }
-      )
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches', filter: `season_id=eq.${id}` },
-        (payload) => setMatches(prev => prev.map(m => m.id === payload.new.id ? { ...m, ...payload.new } : m))
       )
       .subscribe();
 
-    // Fallback polling
     const interval = setInterval(async () => {
         const { data: newMatches } = await supabase.from('matches').select('*, innings(*), team_a:teams!team_a_id(name), team_b:teams!team_b_id(name)').eq('season_id', id).order('round_number');
         if (newMatches) {
@@ -97,51 +101,50 @@ export default function TournamentDashboard() {
   }, [id]);
 
   const handleMatchClick = (matchId: string) => router.push(`/match/${matchId}`);
-
   const { standings, batting, bowling } = calculateStats(matches, teams);
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Loading Tournament...</div>;
+  if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Tournament...</div>;
 
   return (
-    // THEME UPDATE: Removed 'bg-black'. Added text colors.
-    <div key={id as string} className="min-h-screen p-4 pb-safe flex flex-col text-gray-900 dark:text-white">
+    // Background upgraded to use gradient for glass effect to pop
+    <div key={id as string} className="min-h-screen p-4 pb-safe flex flex-col text-gray-900 dark:text-white bg-gradient-to-br from-gray-50 to-gray-200 dark:from-black dark:to-gray-900">
       
       {/* HEADER */}
       <header className="mb-6 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <button 
               onClick={() => router.push('/tournament')}
-              className="bg-gray-200 dark:bg-gray-800 p-2 rounded-full hover:bg-gray-300 dark:hover:bg-gray-700 transition text-sm"
+              className="glass-card p-2 rounded-full hover:scale-105 active:scale-95"
               title="Back to All Seasons"
             >
               🏠
             </button>
             <div>
-              <h1 className="text-2xl font-bold">{seasonName || "Tournament Schedule"}</h1>
-              <p className="text-gray-500 text-xs uppercase tracking-widest mt-1">ID: {id?.toString().slice(0,8)}</p>
+              <h1 className="text-2xl font-black tracking-tight">{seasonName || "Tournament Schedule"}</h1>
+              <p className="text-gray-500 text-xs uppercase tracking-widest mt-1 font-mono">ID: {id?.toString().slice(0,8)}</p>
             </div>
           </div>
           
           {user && (
             <button 
                 onClick={() => router.push('/admin/create')}
-                className="text-xs bg-gray-900 dark:bg-gray-800 hover:bg-gray-700 text-white dark:text-gray-300 px-3 py-2 rounded border border-gray-700 transition"
+                className="text-xs bg-black dark:bg-white text-white dark:text-black font-bold px-4 py-2 rounded-full shadow-lg hover:opacity-80 transition"
             >
                 + New Season
             </button>
           )}
       </header>
       
-      {/* TABS (THEME UPDATED) */}
-      <div className="flex bg-gray-100 dark:bg-gray-900 p-1 rounded-lg mb-6 border border-gray-200 dark:border-gray-800">
+      {/* GLASS TABS */}
+      <div className="flex p-1 rounded-xl mb-6 bg-gray-200/50 dark:bg-gray-800/50 backdrop-blur-sm">
         {(['fixtures', 'table', 'stats'] as const).map(tab => (
             <button 
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-3 text-sm font-bold rounded-md transition capitalize ${
+            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all capitalize ${
                 activeTab === tab 
-                ? 'bg-white dark:bg-gray-800 text-black dark:text-white shadow-sm' 
-                : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
+                ? 'bg-white dark:bg-gray-700 text-black dark:text-white shadow-md scale-100' 
+                : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white scale-95'
             }`}
             >
             {tab}
@@ -149,103 +152,113 @@ export default function TournamentDashboard() {
         ))}
       </div>
       
-      {/* CONTENT AREA */}
       <div className="flex-1 overflow-y-auto">
-        {activeTab === 'fixtures' && (
-            <FixturesView matches={matches} onMatchClick={handleMatchClick} />
-        )}
-
-        {activeTab === 'table' && (
-            <PointsTableView standings={standings} />
-        )}
-
-        {activeTab === 'stats' && (
-            <StatsView batting={batting} bowling={bowling} playerMap={playerMap} />
-        )}
+        {activeTab === 'fixtures' && <FixturesView matches={matches} onMatchClick={handleMatchClick} />}
+        {activeTab === 'table' && <PointsTableView standings={standings} />}
+        {activeTab === 'stats' && <StatsView batting={batting} bowling={bowling} playerMap={playerMap} />}
       </div>
     </div>
   );
 }
 
-// --- SUB COMPONENTS ---
+// --- SUB COMPONENTS (GLASS VERSION) ---
 
 function FixturesView({ matches, onMatchClick }: { matches: any[], onMatchClick: (id: string) => void }) {
     if (matches.length === 0) return <div className="text-gray-500 text-center mt-10">No matches scheduled.</div>;
+    
     return (
-        <div className="space-y-3">
-            {matches.map(match => (
-                <div 
-                    key={match.id}
-                    onClick={() => onMatchClick(match.id)}
-                    // CARD THEME: White/Gray-900
-                    className={`p-4 rounded-xl border flex justify-between items-center cursor-pointer transition active:scale-95 ${
-                        match.is_completed 
-                        ? 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800 opacity-60' 
-                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-blue-500/50 shadow-sm'
-                    }`}
-                >
-                        <div>
-                        <div className={`text-[10px] uppercase font-bold tracking-wider mb-1 ${match.round_number === 100 ? 'text-yellow-600 dark:text-yellow-500 animate-pulse' : 'text-gray-500 dark:text-gray-400'}`}>
-                            {match.round_number === 100 ? "🏆 GRAND FINAL" : match.round_number === 101 ? "⚡ SUPER OVER" : `Round ${match.round_number}`}
-                        </div>
-                        <div className="font-bold text-lg text-gray-900 dark:text-white">
-                            {match.team_a?.name} <span className="text-gray-400 text-sm">vs</span> {match.team_b?.name}
-                        </div>
-                        {match.is_completed && (
-                            <div className="text-green-600 dark:text-green-400 text-xs mt-1 font-medium">{match.result_note}</div>
-                        )}
-                        </div>
-                        <div className="ml-4">
-                        {match.is_completed ? (
-                            <div className="bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-500 text-[10px] font-black px-2 py-1 rounded border border-green-200 dark:border-green-900/30">DONE</div>
-                        ) : (
-                            <div className={`text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg ${match.round_number === 100 ? 'bg-yellow-600 shadow-yellow-900/50' : 'bg-blue-600 shadow-blue-900/50'}`}>
-                                PLAY
+        <AnimatedList className="space-y-4">
+            {matches.map(match => {
+                const isFinal = match.round_number >= 100;
+                
+                return (
+                    <div 
+                        key={match.id}
+                        onClick={() => onMatchClick(match.id)}
+                        className={`
+                            relative group cursor-pointer p-5 rounded-2xl border backdrop-blur-md transition-all duration-300
+                            ${match.is_completed 
+                                ? 'bg-gray-100/50 dark:bg-gray-800/30 border-gray-200/50 dark:border-gray-700/30 opacity-70 hover:opacity-100' // Completed (Dull Glass)
+                                : 'glass-card hover:-translate-y-1' // Active (Shiny Glass)
+                            }
+                            ${isFinal ? 'border-yellow-500/50 dark:border-yellow-500/30 shadow-yellow-500/10' : ''}
+                        `}
+                    >
+                        {/* Grand Final Glow Effect */}
+                        {isFinal && <div className="absolute inset-0 bg-yellow-500/5 rounded-2xl blur-xl -z-10" />}
+
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <div className={`text-[10px] uppercase font-bold tracking-wider mb-2 flex items-center gap-2 ${isFinal ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                                    {isFinal && <span>🏆</span>}
+                                    {match.round_number === 100 ? "GRAND FINAL" : match.round_number === 101 ? "SUPER OVER" : `ROUND ${match.round_number}`}
+                                </div>
+                                
+                                <div className="flex items-center gap-3 text-lg font-bold">
+                                    <span className={match.winner_id === match.team_a_id ? 'text-green-600 dark:text-green-400' : ''}>{match.team_a?.name}</span>
+                                    <span className="text-xs text-gray-400 font-normal">VS</span>
+                                    <span className={match.winner_id === match.team_b_id ? 'text-green-600 dark:text-green-400' : ''}>{match.team_b?.name}</span>
+                                </div>
+
+                                {match.is_completed && (
+                                    <div className="text-green-600 dark:text-green-400 text-xs mt-2 font-medium bg-green-100/50 dark:bg-green-900/30 px-2 py-1 rounded-md inline-block">
+                                        {match.result_note}
+                                    </div>
+                                )}
                             </div>
-                        )}
+
+                            <div className="ml-4">
+                                {match.is_completed ? (
+                                    <div className="w-8 h-8 rounded-full bg-green-500/20 text-green-600 dark:text-green-400 flex items-center justify-center text-sm">✓</div>
+                                ) : (
+                                    <div className={`px-4 py-2 rounded-full font-bold text-xs text-white shadow-lg transition-transform group-hover:scale-105 ${isFinal ? 'bg-gradient-to-r from-yellow-600 to-orange-600' : 'bg-gradient-to-r from-blue-600 to-purple-600'}`}>
+                                        PLAY
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                </div>
-            ))}
-        </div>
+                    </div>
+                );
+            })}
+        </AnimatedList>
     );
 }
 
 function PointsTableView({ standings }: { standings: TeamStats[] }) {
     return (
-        // TABLE THEME
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
+        <AnimatedList className="glass-card rounded-2xl overflow-hidden">
             <table className="w-full text-sm text-left">
-                <thead className="bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 uppercase text-[10px] tracking-wider">
+                <thead className="bg-gray-100/50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 uppercase text-[10px] tracking-wider backdrop-blur-sm">
                     <tr>
-                        <th className="px-4 py-3">Team</th>
-                        <th className="px-2 py-3 text-center">P</th>
-                        <th className="px-2 py-3 text-center">W</th>
-                        <th className="px-2 py-3 text-center">L</th>
-                        <th className="px-2 py-3 text-center hidden sm:table-cell">NRR</th>
-                        <th className="px-4 py-3 text-right">Pts</th>
+                        <th className="px-4 py-4">Team</th>
+                        <th className="px-2 py-4 text-center">P</th>
+                        <th className="px-2 py-4 text-center">W</th>
+                        <th className="px-2 py-4 text-center">L</th>
+                        <th className="px-2 py-4 text-center hidden sm:table-cell">NRR</th>
+                        <th className="px-4 py-4 text-right">Pts</th>
                     </tr>
                 </thead>
-                <tbody className="text-gray-900 dark:text-white">
+                <tbody className="divide-y divide-gray-200/50 dark:divide-gray-700/50">
                     {standings.map((team, idx) => (
-                        <tr key={team.teamId} className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
-                            <td className="px-4 py-3 font-bold flex items-center gap-3">
-                                <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] ${idx < 2 ? 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-500' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>
+                        <tr key={team.teamId} className="hover:bg-white/40 dark:hover:bg-gray-800/40 transition">
+                            <td className="px-4 py-4 font-bold flex items-center gap-3">
+                                <span className={`w-6 h-6 flex items-center justify-center rounded-full text-[10px] font-black ${idx < 2 ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white shadow-sm' : 'bg-gray-200 dark:bg-gray-800 text-gray-500'}`}>
                                     {idx + 1}
                                 </span>
                                 {team.name}
                             </td>
-                            <td className="px-2 py-3 text-center text-gray-500 dark:text-gray-300">{team.played}</td>
-                            <td className="px-2 py-3 text-center text-green-600 dark:text-green-500 font-bold">{team.won}</td>
-                            <td className="px-2 py-3 text-center text-red-600 dark:text-red-500">{team.lost}</td>
-                            <td className="px-2 py-3 text-center text-gray-500 dark:text-gray-400 font-mono text-xs hidden sm:table-cell">
+                            <td className="px-2 py-4 text-center text-gray-500 dark:text-gray-400">{team.played}</td>
+                            <td className="px-2 py-4 text-center text-green-600 dark:text-green-400 font-bold">{team.won}</td>
+                            <td className="px-2 py-4 text-center text-red-500 dark:text-red-400 opacity-80">{team.lost}</td>
+                            <td className="px-2 py-4 text-center text-gray-400 font-mono text-xs hidden sm:table-cell">
                                 {team.nrr > 0 ? '+' : ''}{team.nrr}
                             </td>
-                            <td className="px-4 py-3 text-right font-black text-lg">{team.points}</td>
+                            <td className="px-4 py-4 text-right font-black text-lg">{team.points}</td>
                         </tr>
                     ))}
                 </tbody>
             </table>
-        </div>
+        </AnimatedList>
     );
 }
 
@@ -255,7 +268,7 @@ function StatsView({ batting, bowling, playerMap }: { batting: PlayerBattingStat
         const pid = playerMap[teamId];
         return pid ? (
             <Link href={`/player/${pid}`} className="hover:text-blue-500 hover:underline decoration-blue-500/50 underline-offset-4 transition flex items-center gap-1 group">
-                {name} <span className="text-[10px] text-gray-400 group-hover:text-blue-500 transition">↗</span>
+                {name} <span className="text-[10px] text-gray-400 group-hover:text-blue-500 transition opacity-0 group-hover:opacity-100">↗</span>
             </Link>
         ) : (
             <span>{name}</span>
@@ -263,29 +276,31 @@ function StatsView({ batting, bowling, playerMap }: { batting: PlayerBattingStat
     };
 
     return (
-        <div className="space-y-6">
+        <AnimatedList className="space-y-6">
             {/* BATTING CARD */}
-            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
-                <div className="bg-orange-50 dark:bg-orange-900/20 border-b border-orange-100 dark:border-orange-900/30 p-3">
-                    <h3 className="text-orange-600 dark:text-orange-500 font-bold text-sm uppercase tracking-wider">Orange Cap (Runs)</h3>
+            <div className="glass-card rounded-2xl overflow-hidden">
+                <div className="bg-gradient-to-r from-orange-500/10 to-transparent p-4 border-b border-orange-500/10">
+                    <h3 className="text-orange-600 dark:text-orange-400 font-black text-xs uppercase tracking-widest flex items-center gap-2">
+                        <span>🏏</span> Orange Cap (Runs)
+                    </h3>
                 </div>
-                <table className="w-full text-sm text-left text-gray-900 dark:text-white">
-                    <thead className="text-gray-500 dark:text-gray-500 text-[10px] uppercase bg-gray-50 dark:bg-transparent">
+                <table className="w-full text-sm text-left">
+                    <thead className="text-gray-400 text-[10px] uppercase bg-gray-50/50 dark:bg-gray-800/30">
                         <tr>
-                            <th className="px-4 py-2">Player</th>
-                            <th className="px-2 py-2 text-right">Runs</th>
-                            <th className="px-4 py-2 text-right">HS</th>
+                            <th className="px-4 py-3">Player</th>
+                            <th className="px-2 py-3 text-right">Runs</th>
+                            <th className="px-4 py-3 text-right">HS</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800/50">
                         {batting.slice(0, 5).map((p, i) => (
-                            <tr key={p.teamId} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
-                                <td className="px-4 py-2 font-medium flex items-center gap-2">
-                                    <span className="text-gray-400 font-mono text-xs w-3">{i+1}.</span>
+                            <tr key={p.teamId} className="hover:bg-white/40 dark:hover:bg-gray-800/40 transition">
+                                <td className="px-4 py-3 font-medium flex items-center gap-3">
+                                    <span className="text-gray-300 font-mono text-xs w-3">{i+1}</span>
                                     <PlayerLink teamId={p.teamId} name={p.name} />
                                 </td>
-                                <td className="px-2 py-2 text-right font-bold">{p.runs}</td>
-                                <td className="px-4 py-2 text-right text-gray-500 dark:text-gray-400">{p.highestScore}</td>
+                                <td className="px-2 py-3 text-right font-black">{p.runs}</td>
+                                <td className="px-4 py-3 text-right text-gray-500">{p.highestScore}</td>
                             </tr>
                         ))}
                     </tbody>
@@ -293,32 +308,34 @@ function StatsView({ batting, bowling, playerMap }: { batting: PlayerBattingStat
             </div>
 
             {/* BOWLING CARD */}
-            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
-                <div className="bg-purple-50 dark:bg-purple-900/20 border-b border-purple-100 dark:border-purple-900/30 p-3">
-                    <h3 className="text-purple-600 dark:text-purple-500 font-bold text-sm uppercase tracking-wider">Purple Cap (Wickets)</h3>
+            <div className="glass-card rounded-2xl overflow-hidden">
+                <div className="bg-gradient-to-r from-purple-500/10 to-transparent p-4 border-b border-purple-500/10">
+                    <h3 className="text-purple-600 dark:text-purple-400 font-black text-xs uppercase tracking-widest flex items-center gap-2">
+                        <span>🥎</span> Purple Cap (Wickets)
+                    </h3>
                 </div>
-                <table className="w-full text-sm text-left text-gray-900 dark:text-white">
-                    <thead className="text-gray-500 dark:text-gray-500 text-[10px] uppercase bg-gray-50 dark:bg-transparent">
+                <table className="w-full text-sm text-left">
+                    <thead className="text-gray-400 text-[10px] uppercase bg-gray-50/50 dark:bg-gray-800/30">
                         <tr>
-                            <th className="px-4 py-2">Player</th>
-                            <th className="px-2 py-2 text-right">Wkts</th>
-                            <th className="px-4 py-2 text-right">Best</th>
+                            <th className="px-4 py-3">Player</th>
+                            <th className="px-2 py-3 text-right">Wkts</th>
+                            <th className="px-4 py-3 text-right">Best</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800/50">
                         {bowling.slice(0, 5).map((p, i) => (
-                            <tr key={p.teamId} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
-                                <td className="px-4 py-2 font-medium flex items-center gap-2">
-                                    <span className="text-gray-400 font-mono text-xs w-3">{i+1}.</span>
+                            <tr key={p.teamId} className="hover:bg-white/40 dark:hover:bg-gray-800/40 transition">
+                                <td className="px-4 py-3 font-medium flex items-center gap-3">
+                                    <span className="text-gray-300 font-mono text-xs w-3">{i+1}</span>
                                     <PlayerLink teamId={p.teamId} name={p.name} />
                                 </td>
-                                <td className="px-2 py-2 text-right font-bold">{p.wickets}</td>
-                                <td className="px-4 py-2 text-right text-gray-500 dark:text-gray-400">{p.bestFigures}</td>
+                                <td className="px-2 py-3 text-right font-black">{p.wickets}</td>
+                                <td className="px-4 py-3 text-right text-gray-500">{p.bestFigures}</td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
-        </div>
+        </AnimatedList>
     );
 }

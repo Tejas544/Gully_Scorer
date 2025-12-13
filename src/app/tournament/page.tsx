@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import AnimatedList from '@/components/ui/AnimatedList'; // <--- IMPORTED
 
 type SeasonSummary = {
   id: string;
@@ -116,13 +117,14 @@ export default function SeasonsListPage() {
         )}
       </header>
 
-      <div className="grid gap-4">
-        {seasons.length === 0 ? (
-            <div className="text-gray-500 text-center py-10 border border-dashed border-gray-300 dark:border-gray-800 rounded-xl">
-               No seasons found.
-            </div>
-        ) : (
-            seasons.map((season) => (
+      {/* REPLACED STANDARD DIV WITH ANIMATED LIST */}
+      {seasons.length === 0 ? (
+          <div className="text-gray-500 text-center py-10 border border-dashed border-gray-300 dark:border-gray-800 rounded-xl">
+             No seasons found.
+          </div>
+      ) : (
+          <AnimatedList className="grid gap-4">
+            {seasons.map((season) => (
                 <div key={season.id} className="relative group">
                     <Link 
                     href={`/tournament/${season.id}`}
@@ -155,9 +157,9 @@ export default function SeasonsListPage() {
                         </button>
                     )}
                 </div>
-            ))
-        )}
-      </div>
+            ))}
+          </AnimatedList>
+      )}
     </div>
   );
 }
