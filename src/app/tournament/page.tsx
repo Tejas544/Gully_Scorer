@@ -33,8 +33,33 @@ export default function SeasonsListPage() {
         if (!error && seasonsData) {
           const enhancedSeasons = await Promise.all(
             seasonsData.map(async (season) => {
+              // 1. Get Match Count
               const { count } = await supabase.from('matches').select('*', { count: 'exact', head: true }).eq('season_id', season.id);
-              const { data: finalMatch } = await supabase.from('matches').select('winner_id, teams!matches_winner_id_fkey(name)').eq('season_id', season.id).eq('round_number', 100).eq('is_completed', true).maybeSingle();
+              
+              // 2. Determine Champion Logic
+              // First, check the Grand Final (Round 100)
+              let { data: finalMatch } = await supabase
+                .from('matches')
+                .select('id, winner_id, round_number, is_completed, teams!matches_winner_id_fkey(name)')
+                .eq('season_id', season.id)
+                .eq('round_number', 100)
+                .maybeSingle();
+
+              // CRITICAL FIX: If Final was a TIE (winner_id is null) but completed, check Bowl Out (Round 101)
+              if (finalMatch?.is_completed && !finalMatch.winner_id) {
+                 const { data: bowlOut } = await supabase
+                    .from('matches')
+                    .select('winner_id, teams!matches_winner_id_fkey(name)')
+                    .eq('season_id', season.id)
+                    .eq('round_number', 101)
+                    .eq('is_completed', true)
+                    .maybeSingle();
+                 
+                 if (bowlOut) {
+                    finalMatch = { ...finalMatch, ...bowlOut }; // Override with Bowl Out winner
+                 }
+              }
+
               let championName = null;
               if (finalMatch && finalMatch.teams) { // @ts-ignore
                  championName = finalMatch.teams.name; 
@@ -64,8 +89,6 @@ export default function SeasonsListPage() {
   if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Archives...</div>;
 
   return (
-    // 1. REMOVED 'bg-black'. INHERITS FROM BODY.
-    // 2. TEXT COLOR ADAPTIVE
     <div className="min-h-screen p-4 pb-safe text-gray-900 dark:text-white">
       <header className="flex justify-between items-center mb-8 border-b border-gray-200 dark:border-gray-800 pb-4">
         <div>
@@ -103,7 +126,6 @@ export default function SeasonsListPage() {
                 <div key={season.id} className="relative group">
                     <Link 
                     href={`/tournament/${season.id}`}
-                    // CARD STYLING: White/Gray-50 in Light, Gray-900 in Dark
                     className="block bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5 rounded-xl hover:border-blue-400 dark:hover:border-gray-600 shadow-sm hover:shadow-md transition"
                     >
                     <div className="flex justify-between items-start pr-12">

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { useMatchStore } from '@/store/matchStore';
-import Keypad from '@/components/scorer/keypad';
+import Keypad from '@/components/scorer/keypad'; // Note: Ensure capitalization matches your file system
 import TossModal from '@/components/match/TossModal';
 import MatchControlModal from '@/components/match/MatchControlModal';
 import BallTimeline from '@/components/scorer/BallTimeline';
@@ -88,20 +88,34 @@ export default function MatchPage() {
     }
   }
 
+  // --- LOGIC FIX: NAME RESOLUTION (Handles Bowl Out Naming) ---
   const battingTeamId = currentInnings.batting_team_id;
-  const battingTeamName = battingTeamId === matchData.team_a.id ? matchData.team_a.name : matchData.team_b.name;
-  const bowlingTeamName = battingTeamId === matchData.team_a.id ? matchData.team_b.name : matchData.team_a.name;
+  
+  // Directly access names from matchData relation to ensure fallback exists
+  const teamAName = matchData.team_a?.name || "Team A";
+  const teamBName = matchData.team_b?.name || "Team B";
+  
+  const battingTeamName = battingTeamId === matchData.team_a_id ? teamAName : teamBName;
+  const bowlingTeamName = battingTeamId === matchData.team_a_id ? teamBName : teamAName;
+  // -----------------------------------------------------------
 
   return (
-    // THEME UPDATE: Removed 'bg-black'. Added adaptive text colors.
     <div className="min-h-screen p-4 pb-safe flex flex-col relative text-gray-900 dark:text-white">
        <WicketOverlay />
 
        {/* HEADER */}
        <div className="mb-4 text-center">
+        {/* Special Badge for Bowl Out */}
+        {matchData.round_number === 101 && (
+            <div className="text-yellow-600 dark:text-yellow-400 text-xs font-black uppercase tracking-widest mb-1 animate-pulse">
+                ⚡ BOWL OUT DECIDER ⚡
+            </div>
+        )}
+
         <h2 className="text-gray-500 dark:text-gray-400 text-sm uppercase tracking-widest font-bold">
             {battingTeamName} <span className="text-xs text-gray-400 font-normal">vs</span> {bowlingTeamName}
         </h2>
+        
         <div className="mt-2 text-6xl font-black tracking-tighter">
           {store.totalRuns}<span className="text-3xl text-gray-400 dark:text-gray-600 font-bold">/{store.totalWickets}</span>
         </div>
@@ -117,18 +131,17 @@ export default function MatchPage() {
       )}
 
       {store.inningsNumber === 2 && store.target !== null && (
-        // TARGET PILL THEME
         <div className="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 text-xs py-1 px-3 rounded-full mx-auto w-fit mb-4 border border-gray-300 dark:border-gray-700 shadow-sm">
            Target: <span className="font-bold">{store.target}</span> ({Math.max(0, store.target - store.totalRuns)} runs needed)
         </div>
       )}
 
-       {/* TIMELINE (Adaptive Background) */}
+       {/* TIMELINE */}
        <div className="flex-1 overflow-hidden bg-white dark:bg-gray-900 rounded-2xl mb-4 border border-gray-200 dark:border-gray-800 shadow-sm">
           <BallTimeline />
        </div>
 
-       {/* KEYPAD & CONTROLS (ONLY FOR ADMIN) */}
+       {/* KEYPAD & CONTROLS */}
        {user && (
            <>
                 <div className="mt-auto">

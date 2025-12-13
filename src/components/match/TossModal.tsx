@@ -114,7 +114,7 @@ export default function TossModal({ matchId, teamA, teamB, onTossComplete }: Tos
             {mode === 'virtual' && !tossWinner && (
                 <div className="py-8 perspective-1000">
                     <div 
-                        className="relative w-40 h-40 transform-style-3d transition-transform duration-[3000ms] ease-out"
+                        className="relative w-40 h-40 transform-style-3d transition-transform duration-3000 ease-out"
                         style={{ transform: `rotateY(${coinRotation}deg)` }}
                     >
                         {/* FRONT SIDE (Team A) */}

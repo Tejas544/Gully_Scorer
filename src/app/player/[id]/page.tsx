@@ -163,7 +163,7 @@ export default function PlayerProfile() {
                 ← Back
             </button>
             <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center text-2xl font-bold border-2 border-white/20 text-white shadow-lg">
+                <div className="w-16 h-16 bg-linear-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center text-2xl font-bold border-2 border-white/20 text-white shadow-lg">
                     {player.name.charAt(0)}
                 </div>
                 <div>
