@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
 
@@ -10,11 +10,21 @@ export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
 
+  // FIX: Check if already logged in
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.replace('/tournament'); // Redirect if already logged in
+      }
+    };
+    checkSession();
+  }, [router, supabase]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     
-    // Attempt Login
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -24,63 +34,53 @@ export default function LoginPage() {
       alert(error.message);
       setLoading(false);
     } else {
-      router.push('/tournament'); 
+      router.push('/tournament');
     }
   };
 
-  const handleSignUp = async () => {
-      setLoading(true);
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-      if (error) alert(error.message);
-      else alert("Check your email for the confirmation link!");
-      setLoading(false);
-  }
-
   return (
-    <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-gray-900 p-8 rounded-xl border border-gray-800">
-        <h1 className="text-3xl font-bold mb-6 text-center">Scorer Login</h1>
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50 dark:bg-black text-gray-900 dark:text-white transition-colors duration-500">
+      <div className="w-full max-w-md bg-white dark:bg-gray-900 p-8 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 backdrop-blur-sm">
+        <h1 className="text-3xl font-black mb-6 text-center tracking-tight">Admin Login</h1>
         
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-gray-400 mb-1">Email</label>
-            <input 
-              type="email" 
+            <label className="block text-sm font-bold mb-2 text-gray-500 dark:text-gray-400">Email</label>
+            <input
+              type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-gray-800 p-3 rounded border border-gray-700"
-              required 
+              className="w-full p-4 rounded-xl bg-gray-100 dark:bg-gray-800 border-transparent focus:border-blue-500 focus:bg-white dark:focus:bg-black focus:ring-0 transition font-medium"
+              placeholder="admin@gully.com"
+              required
             />
           </div>
           
           <div>
-            <label className="block text-gray-400 mb-1">Password</label>
-            <input 
-              type="password" 
+            <label className="block text-sm font-bold mb-2 text-gray-500 dark:text-gray-400">Password</label>
+            <input
+              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-gray-800 p-3 rounded border border-gray-700"
-              required 
+              className="w-full p-4 rounded-xl bg-gray-100 dark:bg-gray-800 border-transparent focus:border-blue-500 focus:bg-white dark:focus:bg-black focus:ring-0 transition font-medium"
+              placeholder="••••••••"
+              required
             />
           </div>
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={loading}
-            className="w-full bg-green-600 font-bold py-3 rounded hover:bg-green-500 disabled:opacity-50"
+            className="w-full py-4 bg-black dark:bg-white text-white dark:text-black font-bold rounded-xl hover:scale-[1.02] active:scale-95 transition shadow-lg disabled:opacity-50 disabled:scale-100"
           >
-            {loading ? 'Authenticating...' : 'Log In'}
+            {loading ? 'Authenticating...' : 'Enter Dugout 🏏'}
           </button>
         </form>
         
-        <div className="mt-4 text-center">
-            <button onClick={handleSignUp} className="text-gray-500 text-sm hover:text-white">
-                Create new account?
-            </button>
-        </div>
+        <p className="mt-6 text-center text-xs text-gray-400">
+          Only admins can create tournaments. <br/>
+          <span className="text-blue-500 cursor-pointer hover:underline" onClick={() => router.push('/tournament')}>View as Guest</span>
+        </p>
       </div>
     </div>
   );

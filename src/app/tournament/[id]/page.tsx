@@ -110,6 +110,7 @@ export default function TournamentDashboard() {
     <div key={id as string} className="min-h-screen p-4 pb-safe flex flex-col text-gray-900 dark:text-white bg-gradient-to-br from-gray-50 to-gray-200 dark:from-black dark:to-gray-900">
       
       {/* HEADER */}
+      {/* HEADER */}
       <header className="mb-6 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <button 
@@ -125,14 +126,24 @@ export default function TournamentDashboard() {
             </div>
           </div>
           
-          {user && (
+          <div className="flex gap-2">
+            {/* NEW BUTTON */}
             <button 
-                onClick={() => router.push('/admin/create')}
-                className="text-xs bg-black dark:bg-white text-white dark:text-black font-bold px-4 py-2 rounded-full shadow-lg hover:opacity-80 transition"
+                onClick={() => router.push('/players')}
+                className="glass-card px-3 py-2 rounded-full text-xs font-bold hover:scale-105 transition"
             >
-                + New Season
+                👥 All Players
             </button>
-          )}
+            
+            {user && (
+                <button 
+                    onClick={() => router.push('/admin/create')}
+                    className="text-xs bg-black dark:bg-white text-white dark:text-black font-bold px-4 py-2 rounded-full shadow-lg hover:opacity-80 transition"
+                >
+                    + New
+                </button>
+            )}
+          </div>
       </header>
       
       {/* GLASS TABS */}
@@ -169,8 +180,20 @@ function FixturesView({ matches, onMatchClick }: { matches: any[], onMatchClick:
     return (
         <AnimatedList className="space-y-4">
             {matches.map(match => {
-                const isFinal = match.round_number >= 100;
+                const r = match.round_number;
                 
+                // LABELS
+                let label = `ROUND ${r}`;
+                let isSpecial = false;
+
+                if (r === 91) { label = "QUALIFIER 1"; isSpecial = true; }
+                else if (r === 92) { label = "QUALIFIER 2"; isSpecial = true; }
+                else if (r === 100) { label = "🏆 GRAND FINAL"; isSpecial = true; }
+                else if (r > 9000) { 
+                    label = r % 10 === 1 ? "⚡ SUPER OVER" : "🎯 BOWL OUT"; 
+                    isSpecial = true; 
+                }
+
                 return (
                     <div 
                         key={match.id}
@@ -178,26 +201,26 @@ function FixturesView({ matches, onMatchClick }: { matches: any[], onMatchClick:
                         className={`
                             relative group cursor-pointer p-5 rounded-2xl border backdrop-blur-md transition-all duration-300
                             ${match.is_completed 
-                                ? 'bg-gray-100/50 dark:bg-gray-800/30 border-gray-200/50 dark:border-gray-700/30 opacity-70 hover:opacity-100' // Completed (Dull Glass)
-                                : 'glass-card hover:-translate-y-1' // Active (Shiny Glass)
+                                ? 'bg-gray-100/50 dark:bg-gray-800/30 border-gray-200/50 dark:border-gray-700/30 opacity-70 hover:opacity-100' 
+                                : 'glass-card hover:-translate-y-1' 
                             }
-                            ${isFinal ? 'border-yellow-500/50 dark:border-yellow-500/30 shadow-yellow-500/10' : ''}
+                            ${isSpecial ? 'border-blue-500/30 dark:border-blue-500/30' : ''}
+                            ${r === 100 ? 'border-yellow-500/50 dark:border-yellow-500/50 shadow-yellow-500/10' : ''}
                         `}
                     >
-                        {/* Grand Final Glow Effect */}
-                        {isFinal && <div className="absolute inset-0 bg-yellow-500/5 rounded-2xl blur-xl -z-10" />}
+                        {/* Final Glow */}
+                        {r === 100 && <div className="absolute inset-0 bg-yellow-500/5 rounded-2xl blur-xl -z-10" />}
 
                         <div className="flex justify-between items-center">
                             <div>
-                                <div className={`text-[10px] uppercase font-bold tracking-wider mb-2 flex items-center gap-2 ${isFinal ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                                    {isFinal && <span>🏆</span>}
-                                    {match.round_number === 100 ? "GRAND FINAL" : match.round_number === 101 ? "SUPER OVER" : `ROUND ${match.round_number}`}
+                                <div className={`text-[10px] uppercase font-bold tracking-wider mb-2 flex items-center gap-2 ${isSpecial ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'} ${r===100 ? '!text-yellow-600 dark:!text-yellow-500' : ''}`}>
+                                    {label}
                                 </div>
                                 
                                 <div className="flex items-center gap-3 text-lg font-bold">
-                                    <span className={match.winner_id === match.team_a_id ? 'text-green-600 dark:text-green-400' : ''}>{match.team_a?.name}</span>
+                                    <span className={match.winner_id === match.team_a_id ? 'text-green-600 dark:text-green-400' : ''}>{match.team_a?.name || "TBD"}</span>
                                     <span className="text-xs text-gray-400 font-normal">VS</span>
-                                    <span className={match.winner_id === match.team_b_id ? 'text-green-600 dark:text-green-400' : ''}>{match.team_b?.name}</span>
+                                    <span className={match.winner_id === match.team_b_id ? 'text-green-600 dark:text-green-400' : ''}>{match.team_b?.name || "TBD"}</span>
                                 </div>
 
                                 {match.is_completed && (
@@ -211,7 +234,7 @@ function FixturesView({ matches, onMatchClick }: { matches: any[], onMatchClick:
                                 {match.is_completed ? (
                                     <div className="w-8 h-8 rounded-full bg-green-500/20 text-green-600 dark:text-green-400 flex items-center justify-center text-sm">✓</div>
                                 ) : (
-                                    <div className={`px-4 py-2 rounded-full font-bold text-xs text-white shadow-lg transition-transform group-hover:scale-105 ${isFinal ? 'bg-gradient-to-r from-yellow-600 to-orange-600' : 'bg-gradient-to-r from-blue-600 to-purple-600'}`}>
+                                    <div className={`px-4 py-2 rounded-full font-bold text-xs text-white shadow-lg transition-transform group-hover:scale-105 ${r === 100 ? 'bg-gradient-to-r from-yellow-600 to-orange-600' : 'bg-gradient-to-r from-blue-600 to-purple-600'}`}>
                                         PLAY
                                     </div>
                                 )}

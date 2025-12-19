@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { useMatchStore } from '@/store/matchStore';
-import { useGameSounds } from '@/hooks/useGameSounds'; // <--- NEW IMPORT
-import Keypad from '@/components/scorer/keypad';
+import { useGameSounds } from '@/hooks/useGameSounds';
+import Keypad from '@/components/scorer/keypad'; 
 import TossModal from '@/components/match/TossModal';
 import MatchControlModal from '@/components/match/MatchControlModal';
 import BallTimeline from '@/components/scorer/BallTimeline';
@@ -15,7 +15,7 @@ export default function MatchPage() {
   const { id } = useParams();
   const supabase = createClient();
   const store = useMatchStore();
-  const { playWin } = useGameSounds(); // <--- SOUND HOOK
+  const { playWin } = useGameSounds();
 
   const [matchData, setMatchData] = useState<any>(null);
   const [currentInnings, setCurrentInnings] = useState<any>(null);
@@ -77,14 +77,11 @@ export default function MatchPage() {
     return () => { supabase.removeChannel(channel); };
   }, [id, store.inningsId]);
 
-  // --- LOGIC: INSTANT CELEBRATION CHECK ---
-  // We check the STORE (Instant) not the DB (Delayed).
-  // Confetti Condition: (Innings 2 OR BowlOut) AND (Store says Completed)
+  // --- CELEBRATION LOGIC ---
   const isMatchJustFinished = 
       (currentInnings?.innings_number === 2 || matchData?.round_number === 101) && 
       store.inningsStatus === 'completed';
 
-  // Trigger Sound Effect when match finishes
   useEffect(() => {
     if (isMatchJustFinished) {
         playWin();
@@ -108,20 +105,37 @@ export default function MatchPage() {
   const bowlingTeamName = battingTeamId === matchData.team_a_id ? teamBName : teamAName;
 
   return (
-    <div className="min-h-screen p-4 pb-safe flex flex-col relative text-gray-900 dark:text-white bg-gradient-to-br from-gray-50 to-gray-200 dark:from-black dark:to-gray-900 transition-colors duration-500">
+    <div className="h-[100dvh] w-full p-4 pb-safe flex flex-col relative text-gray-900 dark:text-white bg-gradient-to-br from-gray-50 to-gray-200 dark:from-black dark:to-gray-900 transition-colors duration-500 overflow-hidden">
        
-       {/* 1. CELEBRATION COMPONENT (Instant Trigger) */}
        <Celebration active={isMatchJustFinished} />
-       
        <WicketOverlay />
 
-       {/* HEADER */}
-       <div className="mb-4 text-center">
-        {matchData.round_number === 101 && (
-            <div className="text-yellow-600 dark:text-yellow-400 text-xs font-black uppercase tracking-widest mb-1 animate-pulse">
-                ⚡ BOWL OUT DECIDER ⚡
-            </div>
-        )}
+       {/* HEADER SECTION */}
+       <div className="flex-none mb-4 text-center z-10">
+        
+        {/* DYNAMIC PLAYOFF BADGES */}
+        {(() => {
+            const r = matchData.round_number;
+            let badgeText = "";
+            let colorClass = "";
+            
+            // 4-Team Logic Badges
+            if (r === 91) { badgeText = "QUALIFIER 1"; colorClass = "text-blue-600 dark:text-blue-400"; }
+            else if (r === 92) { badgeText = "QUALIFIER 2"; colorClass = "text-purple-600 dark:text-purple-400"; }
+            else if (r === 100) { badgeText = "🏆 GRAND FINAL"; colorClass = "text-yellow-600 dark:text-yellow-400"; }
+            
+            // Tie Breakers (Super Over ends in 01, Bowl Out ends in 02)
+            else if (r > 9000 && r % 10 === 1) { badgeText = "⚡ SUPER OVER"; colorClass = "text-orange-500 animate-pulse"; }
+            else if (r > 9000 && r % 10 === 2) { badgeText = "🎯 BOWL OUT"; colorClass = "text-red-500 animate-pulse"; }
+
+            if (!badgeText) return null;
+
+            return (
+                <div className={`${colorClass} text-xs font-black uppercase tracking-widest mb-1`}>
+                    {badgeText}
+                </div>
+            );
+        })()}
 
         <h2 className="text-gray-500 dark:text-gray-400 text-sm uppercase tracking-widest font-bold">
             {battingTeamName} <span className="text-xs text-gray-400 font-normal">vs</span> {bowlingTeamName}
@@ -136,34 +150,30 @@ export default function MatchPage() {
       </div>
 
       {store.inningsStatus === 'completed' && (
-        <div className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 p-3 text-center rounded-lg mb-4 font-bold animate-pulse border border-red-200 dark:border-red-900 backdrop-blur-sm">
+        <div className="flex-none bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 p-3 text-center rounded-lg mb-4 font-bold animate-pulse border border-red-200 dark:border-red-900 backdrop-blur-sm z-10">
           {currentInnings.innings_number === 1 ? "INNINGS BREAK" : "MATCH ENDED"}
         </div>
       )}
 
       {store.inningsNumber === 2 && store.target !== null && (
-        <div className="glass-card text-gray-800 dark:text-gray-200 text-xs py-1 px-3 rounded-full mx-auto w-fit mb-4">
+        <div className="flex-none glass-card text-gray-800 dark:text-gray-200 text-xs py-1 px-3 rounded-full mx-auto w-fit mb-4 z-10">
            Target: <span className="font-bold">{store.target}</span> ({Math.max(0, store.target - store.totalRuns)} runs needed)
         </div>
       )}
 
-       {/* TIMELINE */}
-       <div className="flex-1 overflow-hidden glass-card rounded-2xl mb-4">
+       {/* TIMELINE CONTAINER */}
+       <div className="flex-1 overflow-y-auto glass-card rounded-2xl mb-4 p-2 relative">
           <BallTimeline />
        </div>
 
-       {/* KEYPAD */}
-       {user && (
-           <>
-                <div className="mt-auto">
-                    <Keypad onScore={(input) => store.recordBall(input, input.dismissal)} disabled={store.inningsStatus === 'completed'} />
-                </div>
+       {/* KEYPAD CONTAINER */}
+       {user ? (
+           <div className="flex-none mt-auto z-20">
+                <Keypad onScore={(input) => store.recordBall(input, input.dismissal)} disabled={store.inningsStatus === 'completed'} />
                 <MatchControlModal />
-           </>
-       )}
-       
-       {!user && (
-           <div className="text-center text-gray-400 dark:text-gray-600 text-xs mt-2">
+           </div>
+       ) : (
+           <div className="flex-none mt-auto text-center text-gray-400 dark:text-gray-600 text-xs mt-2 pb-2">
                You are viewing as Guest. Updates are live.
            </div>
        )}
